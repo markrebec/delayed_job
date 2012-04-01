@@ -105,7 +105,8 @@ module Psych
               klass.with_exclusive_scope { klass.find(id) }
             end
           rescue ActiveRecord::RecordNotFound
-            raise Delayed::DeserializationError
+            klass.new(payload['attributes'])
+            #raise Delayed::DeserializationError
           end
         when /^!ruby\/Mongoid:(.+)$/
           klass = resolve_class($1)
@@ -113,7 +114,8 @@ module Psych
           begin
             klass.find(payload["attributes"]["_id"])
           rescue Mongoid::Errors::DocumentNotFound
-            raise Delayed::DeserializationError
+            klass.new(payload['attributes'])
+            #raise Delayed::DeserializationError
           end
         else
           visit_Psych_Nodes_Mapping_without_class(object)
