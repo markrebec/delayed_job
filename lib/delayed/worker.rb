@@ -16,7 +16,17 @@ module Delayed
     DEFAULT_QUEUES           = []
     DEFAULT_READ_AHEAD       = 5
 
-    cattr_accessor :min_priority, :max_priority, :max_attempts, :max_run_time, :default_priority, :sleep_delay, :logger, :delay_jobs, :queues, :read_ahead
+    cattr_accessor :min_priority, :max_priority, :max_attempts, :max_run_time,
+      :default_priority, :sleep_delay, :logger, :delay_jobs, :queues,
+      :read_ahead, :plugins, :destroy_failed_jobs
+
+    # Named queue into which jobs are enqueued by default
+    cattr_accessor :default_queue_name
+
+    cattr_reader :backend
+
+    # name_prefix is ignored if name is set directly
+    attr_accessor :name_prefix
 
     def self.reset
       self.sleep_delay      = DEFAULT_SLEEP_DELAY
@@ -31,12 +41,10 @@ module Delayed
     reset
 
     # Add or remove plugins in this list before the worker is instantiated
-    cattr_accessor :plugins
     self.plugins = [Delayed::Plugins::ClearLocks]
 
     # By default failed jobs are destroyed after too many attempts. If you want to keep them around
     # (perhaps to inspect the reason for the failure), set this to false.
-    cattr_accessor :destroy_failed_jobs
     self.destroy_failed_jobs = true
 
     self.logger = if defined?(Rails)
@@ -44,11 +52,6 @@ module Delayed
     elsif defined?(RAILS_DEFAULT_LOGGER)
       RAILS_DEFAULT_LOGGER
     end
-
-    # name_prefix is ignored if name is set directly
-    attr_accessor :name_prefix
-
-    cattr_reader :backend
 
     def self.backend=(backend)
       if backend.is_a? Symbol
@@ -135,7 +138,7 @@ module Delayed
 
             count = result.sum
 
-            break if @exit
+            break if stop?
 
             if count.zero?
               sleep(self.class.sleep_delay)
@@ -144,13 +147,17 @@ module Delayed
             end
           end
 
-          break if @exit
+          break if stop?
         end
       end
     end
 
     def stop
       @exit = true
+    end
+
+    def stop?
+      !!@exit
     end
 
     # Do num jobs and return stats on success/failure.
@@ -167,7 +174,7 @@ module Delayed
         else
           break  # leave if no work could be done
         end
-        break if $exit # leave if we're exiting
+        break if stop? # leave if we're exiting
       end
 
       return [success, failure]
